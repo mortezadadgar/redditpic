@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sync"
 )
 
 const (
@@ -56,6 +57,25 @@ func getRequest(url string) ([]byte, error) {
 	}
 
 	return body, err
+}
+
+func getImageWorker(img string, wg *sync.WaitGroup) error {
+	// decrement waitgroup pool
+	defer func() {
+		wg.Done()
+		fmt.Print(".")
+	}()
+
+	resp, err := getRequest(img)
+	if err != nil {
+		return err
+	}
+
+	f, _ := os.CreateTemp(imagesPath, "img*.jpg")
+
+	f.Write(resp)
+
+	return nil
 }
 
 func main() {
@@ -142,23 +162,26 @@ func main() {
 		f.Close()
 	}()
 
+	// Create waitgroup with length of images slice
+	var wg sync.WaitGroup
+	wg.Add(len(imgs))
+
 	for _, img := range imgs {
-		fmt.Print(".")
-
-		resp, err := getRequest(img)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		fi, err := os.CreateTemp(imagesPath, "img*.jpg")
-		if err != nil {
-			fmt.Printf("Failed to create temp file for %s", fi.Name())
-		}
-
-		fi.Write(resp)
+		go func(img string) {
+			err := getImageWorker(img, &wg)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}(img)
 	}
+
+	// Wait to finish up goroutines
+	wg.Wait()
+
+	// Print a newline after "loading dots"
 	fmt.Println()
 
+	//TODO: get rid of bash
 	err = exec.Command("bash", "-c", *imgv+" "+imagesPath+"/*").Run()
 	if err != nil {
 		log.Fatal(err)
