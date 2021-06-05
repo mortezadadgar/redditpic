@@ -116,7 +116,21 @@ func main() {
 		imgs = append(imgs, img.Arrs.Link)
 	}
 
-	_ = os.Mkdir(imagesPath, 0700)
+	// Remove stale files
+	if _, err = os.Stat(imagesPath); !os.IsNotExist(err) {
+		f, err := os.Open(imagesPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		os.RemoveAll(f.Name())
+		f.Close()
+		fmt.Println("Removed stale files")
+
+		_ = os.Mkdir(imagesPath, 0700)
+	} else {
+		_ = os.Mkdir(imagesPath, 0700)
+	}
+
 	f, err := os.Open(imagesPath)
 	if err != nil {
 		log.Fatal(err)
