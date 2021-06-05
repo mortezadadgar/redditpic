@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	images_path = "/tmp/wallpapers"
-	ua          = "Golang_bot/1.0"
-	url_format  = "https://www.reddit.com/r/%s/%s/.json?t=%s"
+	imagesPath = "/tmp/wallpapers"
+	userAgent  = "Golang_bot/1.0"
+	userFormat = "https://www.reddit.com/r/%s/%s/.json?t=%s"
 
 	subArg    = "Specify subreddit to import images from"
 	imgvArg   = "Program to open images"
@@ -26,13 +26,7 @@ const (
 	sortRangeErr = "sort must be in the correct range"
 )
 
-func die(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-type Jdata struct {
+type jsonUrl struct {
 	Data struct {
 		Child []struct {
 			Arrs struct {
@@ -42,17 +36,21 @@ type Jdata struct {
 	} `json:"data"`
 }
 
-func get_request(url string) []byte {
+func getRequest(url string) []byte {
 	req, err := http.NewRequest("GET", url, nil)
 
-	req.Header.Set("User-Agent", ua)
+	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := http.DefaultClient.Do(req)
-	die(err)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	die(err)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	return body
 }
@@ -94,36 +92,44 @@ func main() {
 		os.Exit(1)
 	}
 
-	url := fmt.Sprintf(url_format, *sub, *sort, *period)
-	res := get_request(url)
+	url := fmt.Sprintf(userFormat, *sub, *sort, *period)
+	resp := getRequest(url)
 
-	var data Jdata
-	err := json.Unmarshal(res, &data)
-	die(err)
-
-	images := data.Data.Child
-	var imgs []string
-	for _, i := range images {
-		imgs = append(imgs, i.Arrs.Link)
+	var data jsonUrl
+	err := json.Unmarshal(resp, &data)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	os.Mkdir(images_path, 0700)
-	f, err := os.Open(images_path)
-	defer func() { // Clean up and close file descriptor
+	var imageData = data.Data.Child
+	var imgs []string
+	for _, img := range imageData {
+		imgs = append(imgs, img.Arrs.Link)
+	}
+
+	_ = os.Mkdir(imagesPath, 0700)
+	f, err := os.Open(imagesPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Clean up and close file descriptor
+	defer func() {
 		os.RemoveAll(f.Name())
 		f.Close()
 	}()
-	die(err)
 
-	for _, i := range imgs {
+	for _, img := range imgs {
 		fmt.Print(".")
-		temp := get_request(i)
-		f, err = os.CreateTemp(images_path, "img*.jpg")
-		f.Write(temp)
+		resp := getRequest(img)
+		f, err = os.CreateTemp(imagesPath, "img*.jpg")
+		f.Write(resp)
 	}
 	fmt.Println()
 
-	err = exec.Command("bash", "-c", *imgv+" "+images_path+"/*").Run()
-	die(err)
+	err = exec.Command("bash", "-c", *imgv+" "+imagesPath+"/*").Run()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 }
