@@ -59,6 +59,9 @@ func getRequest(url string) ([]byte, error) {
 }
 
 func main() {
+	// configure log
+	log.SetFlags(log.Lshortfile)
+
 	flag.Usage = func() {
 		usage := `Usage: redditpic [options]`
 		fmt.Println(usage)
