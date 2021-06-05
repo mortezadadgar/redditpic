@@ -36,23 +36,26 @@ type jsonUrl struct {
 	} `json:"data"`
 }
 
-func getRequest(url string) []byte {
+func getRequest(url string) ([]byte, error) {
 	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
 
 	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
+	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
-	return body
+	return body, err
 }
 
 func main() {
@@ -93,10 +96,13 @@ func main() {
 	}
 
 	url := fmt.Sprintf(userFormat, *sub, *sort, *period)
-	resp := getRequest(url)
+	resp, err := getRequest(url)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	var data jsonUrl
-	err := json.Unmarshal(resp, &data)
+	err = json.Unmarshal(resp, &data)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -121,9 +127,18 @@ func main() {
 
 	for _, img := range imgs {
 		fmt.Print(".")
-		resp := getRequest(img)
-		f, err = os.CreateTemp(imagesPath, "img*.jpg")
-		f.Write(resp)
+
+		resp, err := getRequest(img)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fi, err := os.CreateTemp(imagesPath, "img*.jpg")
+		if err != nil {
+			fmt.Printf("Failed to create temp file for %s", fi.Name())
+		}
+
+		fi.Write(resp)
 	}
 	fmt.Println()
 
