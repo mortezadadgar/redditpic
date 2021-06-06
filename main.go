@@ -20,11 +20,12 @@ const (
 	subArg    = "Specify subreddit to import images from"
 	imgvArg   = "Program to open images"
 	periodArg = "Specify the time range of posts, depends on -a being top"
-	sortArg   = "Sorts posts based on new,hot,top"
+	sortArg   = "Sorts posts based on new, hot, top"
 
-	errNFlag     = "you must specify at least 3 arguments, other than -v"
-	sortErr      = "you can't specify period for"
-	sortRangeErr = "sort must be in the correct range"
+	errNFlag     = "you must provide 4 arguments"
+	errStale     = "Failed to remove stale files"
+	errSort      = "you can't specify period for"
+	errSortRange = "you must specify either of new, hot, top for -a"
 )
 
 type jsonUrl struct {
@@ -38,7 +39,7 @@ type jsonUrl struct {
 }
 
 func getRequest(url string) ([]byte, error) {
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -60,8 +61,12 @@ func getRequest(url string) ([]byte, error) {
 }
 
 func getImageWorker(img string, wg *sync.WaitGroup) error {
+	var f *os.File
+
 	// decrement waitgroup pool
+	// close file descriptor
 	defer func() {
+		f.Close()
 		wg.Done()
 		fmt.Print(".")
 	}()
@@ -71,7 +76,10 @@ func getImageWorker(img string, wg *sync.WaitGroup) error {
 		return err
 	}
 
-	f, _ := os.CreateTemp(imagesPath, "img*.jpg")
+	f, err = os.CreateTemp(imagesPath, "img*.jpg")
+	if err != nil {
+		return err
+	}
 
 	f.Write(resp)
 
@@ -79,9 +87,6 @@ func getImageWorker(img string, wg *sync.WaitGroup) error {
 }
 
 func main() {
-	// configure log
-	log.SetFlags(log.Lshortfile)
-
 	flag.Usage = func() {
 		usage := `Usage: redditpic [options]`
 		fmt.Println(usage)
@@ -90,13 +95,13 @@ func main() {
 	}
 
 	sub := flag.String("s", "", subArg)
-	imgv := flag.String("v", "sxiv", imgvArg)
-	period := flag.String("p", "", periodArg)
 	sort := flag.String("a", "", sortArg)
+	period := flag.String("p", "", periodArg)
+	imgViewer := flag.String("v", "", imgvArg)
 
 	flag.Parse()
 
-	if flag.NFlag() < 3 {
+	if flag.NFlag() < 4 {
 		fmt.Println(errNFlag)
 		flag.Usage()
 	}
@@ -105,17 +110,17 @@ func main() {
 	case "top":
 	case "new":
 		if len(*period) != 0 {
-			fmt.Println(sortErr, "new")
-			os.Exit(1)
+			fmt.Println(errSort, "new")
+			flag.Usage()
 		}
 	case "hot":
 		if len(*period) != 0 {
-			fmt.Println(sortErr, "hot")
-			os.Exit(1)
+			fmt.Println(errSort, "hot")
+			flag.Usage()
 		}
 	default:
-		fmt.Println(sortRangeErr)
-		os.Exit(1)
+		fmt.Println(errSortRange)
+		flag.Usage()
 	}
 
 	url := fmt.Sprintf(userFormat, *sub, *sort, *period)
@@ -140,15 +145,20 @@ func main() {
 	if _, err = os.Stat(imagesPath); !os.IsNotExist(err) {
 		f, err := os.Open(imagesPath)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(errStale, err)
 		}
-		os.RemoveAll(f.Name())
-		f.Close()
-		fmt.Println("Removed stale files")
 
-		_ = os.Mkdir(imagesPath, 0700)
-	} else {
-		_ = os.Mkdir(imagesPath, 0700)
+		err = os.RemoveAll(f.Name())
+		if err != nil {
+			log.Println(errStale, err)
+		}
+
+		f.Close()
+	}
+
+	err = os.MkdirAll(imagesPath, 0700)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	f, err := os.Open(imagesPath)
@@ -182,7 +192,7 @@ func main() {
 	fmt.Println()
 
 	//TODO: get rid of bash
-	err = exec.Command("bash", "-c", *imgv+" "+imagesPath+"/*").Run()
+	err = exec.Command("bash", "-c", *imgViewer+" "+imagesPath+"/*").Run()
 	if err != nil {
 		log.Fatal(err)
 	}
