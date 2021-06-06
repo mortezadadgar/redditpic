@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -191,8 +193,10 @@ func main() {
 	// Print a newline after "loading dots"
 	fmt.Println()
 
-	//TODO: get rid of bash
-	err = exec.Command("bash", "-c", *imgViewer+" "+imagesPath+"/*").Run()
+	matches, _ := filepath.Glob(imagesPath)
+	files := strings.Join(matches, "")
+
+	err = exec.Command(*imgViewer, files).Run()
 	if err != nil {
 		log.Fatal(err)
 	}
