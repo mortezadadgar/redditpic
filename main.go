@@ -57,31 +57,25 @@ func getRequest(url string) (*http.Response, error) {
 }
 
 func getImageWorker(img string, wg *sync.WaitGroup) error {
-	var f *os.File
-
-	// decrement waitgroup pool
-	// close file descriptor
-	defer func() {
-		f.Close()
-		wg.Done()
-		fmt.Print(".")
-	}()
-
 	resp, err := getRequest(img)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	f, err = os.CreateTemp(imagesPath, "img*.jpg")
+	f, err := os.CreateTemp(imagesPath, "img*.jpg")
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 
 	_, err = io.Copy(f, resp.Body)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	fmt.Print(".")
+	wg.Done()
 
 	return nil
 }
@@ -124,6 +118,7 @@ func main() {
 	}
 
 	url := fmt.Sprintf(userFormat, *sub, *sort, *period)
+
 	resp, err := getRequest(url)
 	if err != nil {
 		log.Fatal(err)
