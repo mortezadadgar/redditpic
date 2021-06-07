@@ -40,7 +40,7 @@ type jsonUrl struct {
 	} `json:"data"`
 }
 
-func getRequest(url string) ([]byte, error) {
+func getRequest(url string) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -52,14 +52,8 @@ func getRequest(url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	return body, err
+	return resp, err
 }
 
 func getImageWorker(img string, wg *sync.WaitGroup) error {
@@ -77,13 +71,17 @@ func getImageWorker(img string, wg *sync.WaitGroup) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
 	f, err = os.CreateTemp(imagesPath, "img*.jpg")
 	if err != nil {
 		return err
 	}
 
-	f.Write(resp)
+	_, err = io.Copy(f, resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	return nil
 }
@@ -130,9 +128,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	var data jsonUrl
-	err = json.Unmarshal(resp, &data)
+	err = json.Unmarshal(body, &data)
 	if err != nil {
 		log.Fatal(err)
 	}
