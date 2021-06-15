@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	imagesPath = "/tmp/wallpapers"
+	imagesPath = "/tmp/pics"
 	userAgent  = "Golang_bot/1.0"
 	userFormat = "https://www.reddit.com/r/%s/%s/.json?t=%s"
 
