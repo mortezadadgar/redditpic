@@ -28,6 +28,7 @@ const (
 	errStale     = "Failed to remove stale files"
 	errSort      = "you can't specify period for"
 	errSortRange = "you must specify either of new, hot, top for -a"
+	errSortTop   = "You must provide period for top"
 )
 
 type jsonUrl struct {
@@ -40,6 +41,7 @@ type jsonUrl struct {
 	} `json:"data"`
 }
 
+// The caller need to close respose body
 func getRequest(url string) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -53,7 +55,12 @@ func getRequest(url string) (*http.Response, error) {
 		return nil, err
 	}
 
-	return resp, err
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("HTTP error code: %d", resp.StatusCode)
+		return nil, err
+	}
+
+	return resp, nil
 }
 
 func getImageWorker(img string, wg *sync.WaitGroup) error {
@@ -71,7 +78,7 @@ func getImageWorker(img string, wg *sync.WaitGroup) error {
 
 	_, err = io.Copy(f, resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	fmt.Print(".")
@@ -95,13 +102,17 @@ func main() {
 
 	flag.Parse()
 
-	if flag.NFlag() < 4 {
+	if flag.NFlag() < 3 {
 		fmt.Println(errNFlag)
 		flag.Usage()
 	}
 
 	switch *sort {
 	case "top":
+		if len(*period) == 0 {
+			fmt.Println(errSortTop)
+			flag.Usage()
+		}
 	case "new":
 		if len(*period) != 0 {
 			fmt.Println(errSort, "new")
@@ -119,6 +130,8 @@ func main() {
 
 	url := fmt.Sprintf(userFormat, *sub, *sort, *period)
 
+	fmt.Printf("Processing URL: %s\n", url)
+
 	resp, err := getRequest(url)
 	if err != nil {
 		log.Fatal(err)
@@ -133,7 +146,7 @@ func main() {
 	var data jsonUrl
 	err = json.Unmarshal(body, &data)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Failed to parse json err:%s\n", err)
 	}
 
 	var imageData = data.Data.Child
@@ -144,16 +157,8 @@ func main() {
 
 	// Remove stale files
 	if _, err = os.Stat(imagesPath); !os.IsNotExist(err) {
-		f, err := os.Open(imagesPath)
-		if err != nil {
-			log.Println(errStale, err)
-		}
-
-		err = os.RemoveAll(f.Name())
-		if err != nil {
-			log.Println(errStale, err)
-		}
-
+		f, _ := os.Open(imagesPath)
+		_ = os.RemoveAll(f.Name())
 		f.Close()
 	}
 
@@ -199,5 +204,4 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 }
